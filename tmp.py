@@ -1,42 +1,46 @@
 from fastapi import FastAPI, APIRouter, BackgroundTasks
 from fastapi.responses import JSONResponse
 from fastapi import __version__ as version
-from multiprocessing import Queue, Process
+import multiprocessing
 import time
 
 router = APIRouter()
 
 
-def worker_function(s, input_queue: Queue, output_queue: Queue):
-    while not input_queue.empty():
-        # Espera a que llegue un valor desde el proceso anterior
-        received_s = input_queue.get_nowait()
-        result_s = f"{received_s} -> {s}"
-        print(f"~~~ test_func: {result_s}")
-        output_queue.put_nowait(result_s)  # Pasa el valor al siguiente proceso
+def worker_function(s: str, conn):
+    while True:
+        print(f"~~~ test_func: {s}")
         time.sleep(2)
+        conn.send(f"Message from {s}")  # Envía un mensaje al otro proceso
+        conn.recv()  # Espera a recibir una respuesta
 
 
-def test_func(s):
-    input_queue = Queue()
-    output_queue = Queue()
-    process = Process(
-        target=worker_function, args=(s, input_queue, output_queue))
+def test_func(s: str):
+    parent_conn, child_conn = multiprocessing.Pipe()
+    process = multiprocessing.Process(
+        target=worker_function, args=(s, child_conn))
     process.daemon = True
     process.start()
-    return input_queue, output_queue
+    return parent_conn
 
 
 @router.get("/test")
 def get_test(background_tasks: BackgroundTasks) -> dict:
-    input_queue1, output_queue1 = test_func("one")
-    input_queue2, output_queue2 = test_func("two")
-    input_queue3, output_queue3 = test_func("three")
+    conn_one = test_func("one")
+    conn_two = test_func("two")
+    conn_three = test_func("three")
 
-    input_queue1.put_nowait("start")  # Inicia el proceso inicial
+    # Enviar un mensaje desde el proceso three al proceso two
+    conn_three.send("Message from three to two")
 
-    # Agrega un último elemento a la cola para que el último proceso imprima y termine
-    background_tasks.add_task(lambda: input_queue3.put_nowait("stop"))
+    # Esperar a recibir un mensaje en el proceso two
+    message = conn_two.recv()
+    print(f"Received in process two: {message}")
+
+    # Cerrar las conexiones
+    conn_one.close()
+    conn_two.close()
+    conn_three.close()
 
     return {"message": "test"}
 
