@@ -1,54 +1,42 @@
-from fastapi import FastAPI, APIRouter, BackgroundTasks
+import asyncio
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi import __version__ as version
-import multiprocessing
-import time
-
-router = APIRouter()
+app = FastAPI()
 
 
-def worker_function(s: str, conn):
+async def productor(queue):
+    for i in range(1, 6):
+        await asyncio.sleep(1)  # Simula la generación de un dato
+        dato = f"Dato {i}"
+        await queue.put(dato)
+        print(f"Productor: Generado {dato}")
+
+
+async def consumidor(queue):
     while True:
-        print(f"~~~ test_func: {s}")
-        time.sleep(2)
-        conn.send(f"Message from {s}")  # Envía un mensaje al otro proceso
-        conn.recv()  # Espera a recibir una respuesta
+        dato = await queue.get()
+        print(f"Consumidor: Recibido {dato}")
+        # Aquí puedes manipular el dato como desees
+
+queue = asyncio.Queue()
 
 
-def test_func(s: str):
-    parent_conn, child_conn = multiprocessing.Pipe()
-    process = multiprocessing.Process(
-        target=worker_function, args=(s, child_conn))
-    process.daemon = True
-    process.start()
-    return parent_conn
+@app.post("/start")
+async def iniciar_procesos():
+    # Inicia los procesos productor y consumidor
+    productor_task = asyncio.create_task(productor(queue))
+    consumidor_task = asyncio.create_task(consumidor(queue))
+
+    # Devuelve una respuesta indicando que los procesos se han iniciado
+    return {"mensaje": "Procesos iniciados"}
 
 
-@router.get("/test")
-def get_test(background_tasks: BackgroundTasks) -> dict:
-    conn_one = test_func("one")
-    conn_two = test_func("two")
-    conn_three = test_func("three")
-
-    # Enviar un mensaje desde el proceso three al proceso two
-    conn_three.send("Message from three to two")
-
-    # Esperar a recibir un mensaje en el proceso two
-    message = conn_two.recv()
-    print(f"Received in process two: {message}")
-
-    # Cerrar las conexiones
-    conn_one.close()
-    conn_two.close()
-    conn_three.close()
-
-    return {"message": "test"}
-
-
-@router.get('/version')
+@app.get('/version')
 def versions():
     return JSONResponse({"version": version})
 
 
-app = FastAPI()
-app.include_router(router)
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
