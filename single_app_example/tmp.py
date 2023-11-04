@@ -1,7 +1,9 @@
 import asyncio
+
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 from fastapi import __version__ as version
+from fastapi.responses import JSONResponse
+
 app = FastAPI()
 
 
@@ -19,24 +21,26 @@ async def consumidor(queue):
         print(f"Consumidor: Recibido {dato}")
         # Aquí puedes manipular el dato como desees
 
+
 queue = asyncio.Queue()
 
 
 @app.post("/start")
 async def iniciar_procesos():
     # Inicia los procesos productor y consumidor
-    productor_task = asyncio.create_task(productor(queue))
-    consumidor_task = asyncio.create_task(consumidor(queue))
+    asyncio.create_task(productor(queue))
+    asyncio.create_task(consumidor(queue))
 
     # Devuelve una respuesta indicando que los procesos se han iniciado
     return {"mensaje": "Procesos iniciados"}
 
 
-@app.get('/version')
+@app.get("/version")
 def versions():
     return JSONResponse({"version": version})
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
