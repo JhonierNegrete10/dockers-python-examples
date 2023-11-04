@@ -1,0 +1,11 @@
+#
+pulp
+pandas
+openpyxl
+#
+numpy 
+matplotlib 
+seaborn
+jupyterlab
+Jupyter-DataTables 
+# 
